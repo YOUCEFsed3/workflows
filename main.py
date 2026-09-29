@@ -14,14 +14,6 @@ def send_telegram(message):
     except Exception as e:
         print(f"Error sending msg: {e}")
 
-def send_telegram_photo(photo_path, caption=""):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-    try:
-        with open(photo_path, "rb") as photo:
-            requests.post(url, data={"chat_id": CHAT_ID, "caption": caption}, files={"photo": photo}, timeout=20)
-    except Exception as e:
-        print(f"Error sending photo: {e}")
-
 def run():
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -34,31 +26,29 @@ def run():
         page = context.new_page()
 
         try:
-            print("جاري فتح VFS...")
-            page.goto(TARGET_URL, wait_until="networkidle", timeout=60000)
+            print("جاري الفحص الصامت لصفحة VFS...")
+            page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(5000)
 
-            # التقاط الصورة الحالية
-            screenshot_path = "vfs_state.png"
-            page.screenshot(path=screenshot_path, full_page=True)
-            body_text = page.inner_text("body")
+            body_text = page.inner_text("body").lower()
 
-            # فحص وجود نص الموعد أو التاريخ المحدد
-            if "04-10-2026" in body_text or "earliest available slot" in body_text.lower():
+            # الكلمات الدالة على فتح المواعيد
+            keywords = ["earliest available slot", "available slot", "applicants is", "04-10-2026"]
+            
+            # إذا ظهرت أي كلمة دلت على موعد متاح ينطلق التنبيه فوراً
+            if any(kw in body_text for kw in keywords):
                 send_telegram(
-                    "🚨 *تنبيه عاجل: موعد متاح في VFS هولندا!*\n\n"
-                    "📌 *الفئة:* Other Category / Short Stay\n"
-                    "📅 *الموعد الكاشف:* `04-10-2026`\n\n"
-                    f"🔗 [سجل دخولك فوراً للحجز]({TARGET_URL})"
+                    f"🚨 *تنبيه عاجل: تم كشف مواعيد في VFS هولندا!*\n\n"
+                    f"هناك تحديث أو موعد متاح حالياً على النظام.\n\n"
+                    f"🔗 [افتح VFS وسجل دخولك فوراً للحجز]({TARGET_URL})"
                 )
-                send_telegram_photo(screenshot_path, "صورة الموعد المتاح")
+                print("✅ تم العثور على موعد وإرسال التنبيه!")
             else:
-                send_telegram("ℹ️ *تحديث الفحص:* البوت متصل ومستعد، وفي انتظار ظهور تحديث المواعيد داخل النظام.")
-                send_telegram_photo(screenshot_path, "حالة الشاشة الحالية")
+                print("⚙️ الفحص تم بنجاح: لا يوجد موعد متاح حالياً، البوت يعمل بصمت.")
 
         except Exception as e:
-            print(f"خطأ: {e}")
-            send_telegram(f"⚠️ *خطأ فحص:* `{e}`")
+            # طباعة الخطأ في السجل الداخلي لـ GitHub فقط دون إزعاجك في تلغرام
+            print(f"تنبيه خلفي: {e}")
         finally:
             browser.close()
 
